@@ -1,0 +1,168 @@
+# ================================
+# STEP 1: IMPORT LIBRARIES
+# ================================
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+from sklearn.linear_model import Ridge
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import mean_squared_error, r2_score
+
+# ================================
+# STEP 2: LOAD DATASET
+# ================================
+df = pd.read_csv(r"C:\Users\Admin\Downloads\car_data.csv")
+
+# Clean column names
+df.columns = df.columns.str.lower().str.strip()
+
+print("Columns in dataset:\n", df.columns)
+print("\nPreview:\n", df.head())
+
+# ================================
+# STEP 3: AUTO COLUMN DETECTION 🔥
+# ================================
+def find_column(keyword_list):
+    for col in df.columns:
+        for key in keyword_list:
+            if key in col:
+                return col
+    return None
+
+hp_col = find_column(['horse', 'hp'])
+wt_col = find_column(['weight'])
+disp_col = find_column(['disp'])
+acc_col = find_column(['acc'])
+mpg_col = find_column(['mpg'])
+year_col = find_column(['year'])
+
+# Rename safely
+if hp_col: df.rename(columns={hp_col: 'horsepower'}, inplace=True)
+if wt_col: df.rename(columns={wt_col: 'weight'}, inplace=True)
+if disp_col: df.rename(columns={disp_col: 'displacement'}, inplace=True)
+if acc_col: df.rename(columns={acc_col: 'acceleration'}, inplace=True)
+if mpg_col: df.rename(columns={mpg_col: 'mpg'}, inplace=True)
+if year_col: df.rename(columns={year_col: 'model_year'}, inplace=True)
+
+# ================================
+# STEP 4: DATA CLEANING
+# ================================
+# Safe numeric conversion & fill missing values
+for col in ['horsepower', 'weight', 'displacement', 'acceleration']:
+    if col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+        df[col] = df[col].fillna(df[col].median())  # ✅ fixed for future pandas
+
+# Drop non-useful column
+if 'car name' in df.columns:
+    df.drop(columns=['car name'], inplace=True)
+
+print("\nMissing values:\n", df.isnull().sum())
+
+# ================================
+# STEP 5: FEATURE ENGINEERING
+# ================================
+if 'horsepower' in df.columns and 'weight' in df.columns:
+    df['power_to_weight'] = df['horsepower'] / (df['weight'] + 1)
+else:
+    df['power_to_weight'] = 0
+
+if 'model_year' in df.columns:
+    df['car_age'] = 2025 - df['model_year']
+else:
+    df['car_age'] = 0
+
+print("\nFeature Engineering Done")
+
+# ================================
+# STEP 6: SELECT FEATURES
+# ================================
+features = ['displacement', 'horsepower', 'weight', 'acceleration',
+            'power_to_weight', 'car_age']
+features = [col for col in features if col in df.columns]
+
+X = df[features]
+y = df['mpg']
+
+# ================================
+# STEP 7: TRAIN TEST SPLIT
+# ================================
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+# ================================
+# STEP 8: BUILD PIPELINE
+# ================================
+pipeline = Pipeline([
+    ('scaler', StandardScaler()),
+    ('poly', PolynomialFeatures()),
+    ('model', Ridge())
+])
+
+# ================================
+# STEP 9: HYPERPARAMETER TUNING
+# ================================
+param_grid = {
+    'poly__degree': [1, 2, 3],
+    'model__alpha': [0.1, 1, 10]
+}
+
+grid = GridSearchCV(pipeline, param_grid, cv=5, scoring='r2')
+grid.fit(X_train, y_train)
+
+print("\nBest Parameters:", grid.best_params_)
+
+# ================================
+# STEP 10: PREDICTION
+# ================================
+best_model = grid.best_estimator_
+y_pred = best_model.predict(X_test)
+
+# ================================
+# STEP 11: EVALUATION
+# ================================
+mse = mean_squared_error(y_test, y_pred)
+rmse = np.sqrt(mse)
+r2 = r2_score(y_test, y_pred)
+
+print("\nResults:")
+print("MSE:", mse)
+print("RMSE:", rmse)
+print("R2 Score:", r2)
+
+# ================================
+# STEP 12: CROSS VALIDATION
+# ================================
+cv_scores = cross_val_score(best_model, X, y, cv=5, scoring='r2')
+print("\nCV Scores:", cv_scores)
+print("Average CV Score:", np.mean(cv_scores))
+
+# ================================
+# STEP 13: VISUALIZATION
+# ================================
+plt.scatter(y_test, y_pred)
+plt.xlabel("Actual MPG")
+plt.ylabel("Predicted MPG")
+plt.title("Actual vs Predicted")
+plt.show()
+
+# ================================
+# STEP 14: RESIDUAL ANALYSIS
+# ================================
+residuals = y_test - y_pred
+plt.scatter(y_pred, residuals)
+plt.axhline(y=0)
+plt.xlabel("Predicted")
+plt.ylabel("Residuals")
+plt.title("Residual Plot")
+plt.show()
+
+# ================================
+# FINAL MESSAGE
+# ================================
+print("\n✅ Model executed successfully without errors!")
